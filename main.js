@@ -84,10 +84,34 @@ const keys = new Set();
 window.addEventListener('keydown', e => keys.add(e.code));
 window.addEventListener('keyup',   e => keys.delete(e.code));
 
+// タッチ操作用の変数
+const touchState = {
+  moveActive: false,
+  lookActive: false,
+  moveX: 0, moveY: 0,
+  lookX: 0, lookY: 0,
+  moveTouchId: null,
+  lookTouchId: null
+};
+
 // オーディオ
 const listener = new THREE.AudioListener();
 camera.add(listener);
 const audioLoader = new THREE.AudioLoader();
+
+// スマホのオーディオ自動再生制限に対応
+let audioContextResumed = false;
+function resumeAudioContext() {
+  if (!audioContextResumed && listener.context.state === 'suspended') {
+    listener.context.resume().then(() => {
+      audioContextResumed = true;
+    });
+  }
+}
+
+// 最初のユーザー操作でオーディオコンテキストを再開
+document.addEventListener('touchstart', resumeAudioContext, { once: true });
+document.addEventListener('click', resumeAudioContext, { once: true });
 
 // 扉生成：ヒンジ（pivot）で回す → 少し開いて戻す
 const DOORS = [];
@@ -333,23 +357,31 @@ window.addEventListener('keyup', (e) => {
   }
 });
 
-//// カメラ回転と移動（カーソルキーのみ） ////
+//// カメラ回転と移動（カーソルキー + タッチ） ////
 const MOVE_SPEED = 7.0;
 const TURN_SPEED = 2.0; // ラジアン/秒
 
 function updateMovement(dt) {
   // カーソルキー左右で視点回転
+  let rotateInput = 0;
   if (keys.has('ArrowLeft')) {
-    camera.rotation.y += TURN_SPEED * dt;
+    rotateInput += 1;
   }
   if (keys.has('ArrowRight')) {
-    camera.rotation.y -= TURN_SPEED * dt;
+    rotateInput -= 1;
   }
+  // タッチ操作の視点回転を追加
+  if (touchState.lookActive) {
+    rotateInput += touchState.lookX * 2;
+  }
+  camera.rotation.y += rotateInput * TURN_SPEED * dt;
 
   // カーソルキー上下で前後移動
   const forward = new THREE.Vector3();
   camera.getWorldDirection(forward);
   forward.y = 0; forward.normalize();
+
+  const right = new THREE.Vector3(-forward.z, 0, forward.x); // 右方向
 
   let v = new THREE.Vector3();
   if (keys.has('ArrowUp')) {
@@ -357,6 +389,12 @@ function updateMovement(dt) {
   }
   if (keys.has('ArrowDown')) {
     v.sub(forward);
+  }
+
+  // タッチ操作の移動を追加
+  if (touchState.moveActive) {
+    v.add(forward.clone().multiplyScalar(touchState.moveY));
+    v.add(right.clone().multiplyScalar(touchState.moveX));
   }
 
   if (v.lengthSq()>0) {
@@ -453,3 +491,107 @@ addEventListener('resize', ()=>{
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
+
+//// タッチ操作(スマホ対応) ////
+// タッチで扉を開ける
+let touchOpenActive = false;
+document.addEventListener('touchstart', (e) => {
+  const d = getFocusedDoor();
+  if (d) {
+    touchOpenActive = true;
+    currentFocusedDoor = d;
+    d.isHolding = true;
+    e.preventDefault();
+  }
+});
+
+document.addEventListener('touchend', () => {
+  if (touchOpenActive && currentFocusedDoor) {
+    currentFocusedDoor.isHolding = false;
+    currentFocusedDoor = null;
+    touchOpenActive = false;
+  }
+});
+
+// バーチャルジョイスティック
+const joystickLeft = document.getElementById('joystick-left');
+const joystickRight = document.getElementById('joystick-right');
+
+if (joystickLeft && joystickRight) {
+  // 左ジョイスティック(視点回転)
+  joystickLeft.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    touchState.lookTouchId = touch.identifier;
+    touchState.lookActive = true;
+  });
+
+  joystickLeft.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (let touch of e.touches) {
+      if (touch.identifier === touchState.lookTouchId) {
+        const rect = joystickLeft.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const maxDist = rect.width / 2;
+
+        const dx = touch.clientX - centerX;
+
+        touchState.lookX = Math.max(-1, Math.min(1, dx / maxDist));
+        break;
+      }
+    }
+  });
+
+  joystickLeft.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    for (let touch of e.changedTouches) {
+      if (touch.identifier === touchState.lookTouchId) {
+        touchState.lookActive = false;
+        touchState.lookX = 0;
+        touchState.lookY = 0;
+        touchState.lookTouchId = null;
+        break;
+      }
+    }
+  });
+
+  // 右ジョイスティック(移動)
+  joystickRight.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    touchState.moveTouchId = touch.identifier;
+    touchState.moveActive = true;
+  });
+
+  joystickRight.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (let touch of e.touches) {
+      if (touch.identifier === touchState.moveTouchId) {
+        const rect = joystickRight.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const maxDist = rect.width / 2;
+
+        const dx = touch.clientX - centerX;
+        const dy = touch.clientY - centerY;
+
+        touchState.moveX = Math.max(-1, Math.min(1, dx / maxDist));
+        touchState.moveY = -Math.max(-1, Math.min(1, dy / maxDist));
+        break;
+      }
+    }
+  });
+
+  joystickRight.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    for (let touch of e.changedTouches) {
+      if (touch.identifier === touchState.moveTouchId) {
+        touchState.moveActive = false;
+        touchState.moveX = 0;
+        touchState.moveY = 0;
+        touchState.moveTouchId = null;
+        break;
+      }
+    }
+  });
+}

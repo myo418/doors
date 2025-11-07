@@ -13,17 +13,76 @@
 }
 </script>
 <style>
-  html,body { margin:0; height:100%; overflow:hidden; background:#111; }
-  #info { position:fixed; left:12px; top:12px; color:#fff; font:14px/1.4 system-ui; }
-  #hint { position:fixed; left:50%; bottom:28px; transform:translateX(-50%); color:#fff; font:16px system-ui; opacity:.85; }
-  #lock { position:fixed; inset:0; display:grid; place-items:center; background:#0008; color:#fff; font:20px system-ui; cursor:pointer; }
+  html,body { margin:0; height:100%; overflow:hidden; background:#111; touch-action: none; }
+  #info { position:fixed; left:12px; top:12px; color:#fff; font:14px/1.4 system-ui; z-index:100; }
+  #hint { position:fixed; left:50%; bottom:28px; transform:translateX(-50%); color:#fff; font:16px system-ui; opacity:.85; z-index:100; }
+  #lock { position:fixed; inset:0; display:grid; place-items:center; background:#0008; color:#fff; font:20px system-ui; cursor:pointer; z-index:200; }
+
+  /* バーチャルジョイスティック */
+  .joystick {
+    position: fixed;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    border: 3px solid rgba(255,255,255,0.3);
+    bottom: 30px;
+    z-index: 50;
+    touch-action: none;
+  }
+  #joystick-left {
+    left: 30px;
+  }
+  #joystick-right {
+    right: 30px;
+  }
+  .joystick::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.4);
+  }
+
+  /* PC表示時はジョイスティックを隠す */
+  @media (min-width: 768px) {
+    .joystick {
+      display: none;
+    }
+  }
+
+  /* スマホ表示時はinfoを簡略化 */
+  @media (max-width: 767px) {
+    #info {
+      font-size: 12px;
+      max-width: 60%;
+    }
+  }
 </style>
 </head>
 <body>
-<div id="info">カーソルキー：↑↓で前後移動・←→で視点回転。扉の前で <b>E</b> 長押しで開く。</div>
+<div id="info">
+  <span class="desktop-info">カーソルキー：↑↓で前後移動・←→で視点回転。扉の前で <b>E</b> 長押しで開く。</span>
+  <span class="mobile-info">左：視点回転 / 右：移動<br>扉の前でタップして開く</span>
+</div>
 <div id="hint"></div>
-<div id="lock">クリックして開始（Pointer Lock）</div>
+<div id="lock">loading</div>
+
+<!-- バーチャルジョイスティック（スマホ用） -->
+<div id="joystick-left" class="joystick"></div>
+<div id="joystick-right" class="joystick"></div>
 
 <script type="module" src="main.js"></script>
+<style>
+  .mobile-info { display: none; }
+  @media (max-width: 767px) {
+    .desktop-info { display: none; }
+    .mobile-info { display: inline; }
+  }
+</style>
 </body>
 </html>
