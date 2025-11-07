@@ -496,6 +496,12 @@ addEventListener('resize', ()=>{
 // タッチで扉を開ける
 let touchOpenActive = false;
 document.addEventListener('touchstart', (e) => {
+  // ジョイスティックをタッチした場合は扉を開けない
+  const target = e.target;
+  if (target.classList.contains('joystick') || target.closest('.joystick')) {
+    return;
+  }
+
   const d = getFocusedDoor();
   if (d) {
     touchOpenActive = true;
@@ -536,7 +542,7 @@ if (joystickLeft && joystickRight) {
 
         const dx = touch.clientX - centerX;
 
-        touchState.lookX = Math.max(-1, Math.min(1, dx / maxDist));
+        touchState.lookX = -Math.max(-1, Math.min(1, dx / maxDist));
         break;
       }
     }
